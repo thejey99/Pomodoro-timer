@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Focus Timer</title>
+<style>
+  @font-face{
+    font-family:'DSEG7';
+    src:url('https://cdn.jsdelivr.net/npm/dseg@0.46.0/fonts/DSEG7-Classic/DSEG7Classic-Bold.woff2') format('woff2');
+    font-weight:700;font-display:swap;
+  }
+  html,body{margin:0;height:100%;background:#0d0d0d;font-family:system-ui,sans-serif;}
+  #stage{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;}
+  .case{background:#141414;border-radius:20px;padding:26px 30px;width:340px;border:1px solid #262626;box-sizing:border-box;}
+  .screen{background:#0a0a0a;border-radius:12px;padding:22px 20px;position:relative;border:1px solid #1c1c1c;}
+  .corner{position:absolute;font-family:'DSEG7',monospace;color:#3a0d0d;}
+  .clock{position:relative;text-align:center;cursor:pointer;user-select:none;}
+  .ghost{font-family:'DSEG7',monospace;font-size:64px;line-height:1;color:#2a0808;letter-spacing:2px;}
+  .digits{position:absolute;inset:0;font-family:'DSEG7',monospace;font-size:64px;line-height:1;color:#ff2b1a;letter-spacing:2px;text-shadow:0 0 8px rgba(255,43,26,0.55);}
+  .btns{display:flex;justify-content:center;gap:10px;margin-top:20px;}
+  button{background:#1d1d1d;color:#ff5c4d;border:1px solid #3a1512;border-radius:10px;padding:9px 18px;font-size:14px;font-family:system-ui,sans-serif;cursor:pointer;}
+  button:hover{background:#262626;}
+  #note{color:#555;font-size:12px;}
+  /* dragged-in-page fallback state */
+  body.floating #stage{display:block;}
+  body.floating .case{position:fixed;top:24px;left:24px;z-index:9999;cursor:move;}
+</style>
+</head>
+<body>
+  <div id="stage">
+    <div class="case" id="case">
+      <div class="screen">
+        <span class="corner" style="top:12px;left:16px;font-size:13px;">&#9660;</span>
+        <span class="corner" style="bottom:12px;left:16px;font-size:11px;">P</span>
+        <span class="corner" style="top:12px;right:16px;font-size:11px;">z<sup>z</sup></span>
+        <div class="clock" id="clock" title="Click to pause / resume">
+          <div class="ghost">88:88</div>
+          <div class="digits" id="digits">25:00</div>
+        </div>
+      </div>
+      <div class="btns">
+        <button id="restart">&#8635; Restart</button>
+        <button id="popout">&#8599; Pop out</button>
+      </div>
+    </div>
+    <div id="note"></div>
+  </div>
+
+<script>
+(function(){
+  var TOTAL=25*60, left=TOTAL, running=true, tick=null;
+  var digits=document.getElementById('digits');
+  var clock=document.getElementById('clock');
+  var caseEl=document.getElementById('case');
+  var note=document.getElementById('note');
+
+  function render(){
+    var m=Math.floor(left/60), s=left%60;
+    digits.textContent=(m<10?'0':'')+m+':'+(s<10?'0':'')+s;
+  }
+  function step(){
+    if(!running) return;
+    if(left>0){ left--; render(); }
+    else { running=false; digits.style.opacity=(digits.style.opacity==='0.25'?'1':'0.25'); }
+  }
+  function start(){ if(tick) clearInterval(tick); tick=setInterval(step,1000); }
+  function restart(){ left=TOTAL; running=true; digits.style.opacity='1'; render(); start(); }
+  function toggle(){ if(left===0) return; running=!running; digits.style.opacity=running?'1':'0.4'; }
+
+  document.getElementById('restart').addEventListener('click',restart);
+  clock.addEventListener('click',toggle);
+
+  // --- Always-on-top pop-out via Document Picture-in-Picture ---
+  document.getElementById('popout').addEventListener('click', async function(){
+    if(!('documentPictureInPicture' in window)){
+      enablePageDrag();
+      note.textContent='Pop-out needs Chrome/Edge/Firefox 151+. Dragging on the page instead.';
+      return;
+    }
+    var pip = await documentPictureInPicture.requestWindow({ width:360, height:230 });
+    // carry the stylesheet into the floating window
+    [...document.styleSheets].forEach(function(ss){
+      try{
+        var css=[...ss.cssRules].map(function(r){return r.cssText;}).join('');
+        var st=document.createElement('style'); st.textContent=css;
+        pip.document.head.appendChild(st);
+      }catch(e){
+        if(ss.href){ var l=document.createElement('link'); l.rel='stylesheet'; l.href=ss.href; pip.document.head.appendChild(l); }
+      }
+    });
+    pip.document.body.style.margin='0';
+    pip.document.body.style.background='#0d0d0d';
+    pip.document.body.appendChild(caseEl);          // move the clock into the floating window
+    pip.addEventListener('pagehide', function(){     // put it back when the window closes
+      document.getElementById('stage').prepend(caseEl);
+    });
+  });
+
+  // --- In-page drag fallback (moves within the browser window) ---
+  function enablePageDrag(){
+    document.body.classList.add('floating');
+    var dx=0, dy=0, down=false;
+    caseEl.addEventListener('mousedown', function(e){
+      if(e.target.tagName==='BUTTON') return;
+      down=true; dx=e.clientX-caseEl.offsetLeft; dy=e.clientY-caseEl.offsetTop;
+    });
+    window.addEventListener('mousemove', function(e){
+      if(!down) return; caseEl.style.left=(e.clientX-dx)+'px'; caseEl.style.top=(e.clientY-dy)+'px';
+    });
+    window.addEventListener('mouseup', function(){ down=false; });
+  }
+
+  render(); start();
+})();
+</script>
+</body>
+</html>
